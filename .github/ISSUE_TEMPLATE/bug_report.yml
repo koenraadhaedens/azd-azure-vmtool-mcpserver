@@ -1,0 +1,37 @@
+name: Bug Report
+description: let us know if something is broken
+title: "[Bug Report]: <REPLACE Description of the bug >"
+labels: ["bug"]
+assignees: 'petender'
+body:
+  - type: input
+    id: contact
+    attributes:
+        label: Contact Details
+        description: (OPTIONAL) How can we get in touch with you if we need more info 😉?
+        placeholder: ex. email@example.com
+    validations:
+        required: false
+
+  - type: textarea
+    id: bug 
+    attributes:
+        label: Describe the bug  
+        description: Describe the bug 
+        placeholder: Tell us what you see!
+        
+
+  - type: textarea
+    id: Demo-Affected 
+    attributes:
+        label: Demo Applied to 
+        description: If applicable, provide the name of the demo scenario
+        placeholder: Demo name
+
+  - type: textarea
+    id: Screenshots
+    attributes:
+        label: Relevant screenshots
+        description: Please copy and paste any relevant screenshots 📸
+        value: paste here 😉 
+

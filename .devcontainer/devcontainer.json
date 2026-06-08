@@ -1,0 +1,34 @@
+{
+  "name": "trainer-demo-deploy",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "remoteUser": "node",
+  "updateRemoteUserUID": true,
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode-remote.remote-containers",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "astro-build.astro-vscode",
+        "vitest.explorer",
+        "github.vscode-github-actions",
+        "github.vscode-pull-request-github",
+        "redhat.vscode-yaml"
+      ]
+    }
+  },
+  "containerEnv": {
+    "HOST": "0.0.0.0",
+    "CHOKIDAR_USEPOLLING": "true"
+  },
+  "forwardPorts": [4321],
+  "portsAttributes": {
+    "4321": {
+      "label": "Site dev server",
+      "onAutoForward": "openPreview"
+    }
+  },
+  "postCreateCommand": "cd site && npm install --no-audit --no-fund"
+}
+
