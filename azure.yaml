@@ -1,0 +1,9 @@
+name: azure-vm-mcp-server
+metadata:
+  template: azure-vm-mcp-server@0.0.1
+
+infra:
+  provider: bicep
+  path: infra
+  module: main
+  resourceGroup: rg-${AZURE_ENV_NAME}

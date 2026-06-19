@@ -1,59 +1,40 @@
 import axios from 'axios';
+import { DefaultAzureCredential } from '@azure/identity';
 import 'dotenv/config';
 
-const {
-  AZURE_TENANT_ID,
-  AZURE_CLIENT_ID,
-  AZURE_CLIENT_SECRET,
-  AZURE_SUBSCRIPTION_ID,
-} = process.env;
-
-const MANAGEMENT_SCOPE = 'https://management.azure.com/.default';
 const BASE_URL = 'https://management.azure.com';
 const COMPUTE_API_VERSION = '2024-03-01';
 
-// In-memory token cache — tokens are valid for ~1 hour; we refresh 60 s early
+const credential = new DefaultAzureCredential();
 let tokenCache = { token: null, expiresAt: 0 };
 
+// Returns a cached ARM bearer token, refreshing it 60 s before expiry.
+// Uses managed identity when running in ACI, or SP env vars locally.
 export async function getToken() {
   if (tokenCache.token && Date.now() < tokenCache.expiresAt) {
     return tokenCache.token;
   }
-
-  const url = `https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/token`;
-  const body = new URLSearchParams({
-    grant_type: 'client_credentials',
-    client_id: AZURE_CLIENT_ID,
-    client_secret: AZURE_CLIENT_SECRET,
-    scope: MANAGEMENT_SCOPE,
-  });
-
-  const { data } = await axios.post(url, body.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
-
-  tokenCache = {
-    token: data.access_token,
-    expiresAt: Date.now() + (data.expires_in - 60) * 1000,
-  };
-
-  return tokenCache.token;
+  const { token, expiresOnTimestamp } = await credential.getToken(
+    'https://management.azure.com/.default'
+  );
+  tokenCache = { token, expiresAt: expiresOnTimestamp - 60_000 };
+  return token;
 }
 
 function vmBaseUrl(resourceGroup, vmName) {
+  const sub = process.env.AZURE_SUBSCRIPTION_ID;
   return (
-    `${BASE_URL}/subscriptions/${AZURE_SUBSCRIPTION_ID}` +
+    `${BASE_URL}/subscriptions/${sub}` +
     `/resourceGroups/${resourceGroup}` +
     `/providers/Microsoft.Compute/virtualMachines/${vmName}`
   );
 }
 
-/**
- * Returns the current power state and full status list for a VM.
- * API: GET .../virtualMachines/{vmName}/instanceView
- */
-export async function getVmState(resourceGroup, vmName) {
-  const token = await getToken();
+// armToken: delegated user token from OBO flow (production)
+//           falls back to service principal token in local dev
+
+export async function getVmState(resourceGroup, vmName, armToken) {
+  const token = armToken ?? await getToken();
   const url = `${vmBaseUrl(resourceGroup, vmName)}/instanceView?api-version=${COMPUTE_API_VERSION}`;
 
   const { data } = await axios.get(url, {
@@ -70,14 +51,11 @@ export async function getVmState(resourceGroup, vmName) {
   };
 }
 
-/**
- * Lists all VMs in a resource group with basic metadata.
- * API: GET .../resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines
- */
-export async function listVms(resourceGroup) {
-  const token = await getToken();
+export async function listVms(resourceGroup, armToken) {
+  const token = armToken ?? await getToken();
+  const sub = process.env.AZURE_SUBSCRIPTION_ID;
   const url =
-    `${BASE_URL}/subscriptions/${AZURE_SUBSCRIPTION_ID}` +
+    `${BASE_URL}/subscriptions/${sub}` +
     `/resourceGroups/${resourceGroup}` +
     `/providers/Microsoft.Compute/virtualMachines?api-version=${COMPUTE_API_VERSION}`;
 
@@ -93,12 +71,8 @@ export async function listVms(resourceGroup) {
   }));
 }
 
-/**
- * Sends a control action (start | deallocate | restart) to the Compute API.
- * All three actions are asynchronous; the response includes an operation URL.
- */
-async function postVmAction(resourceGroup, vmName, action) {
-  const token = await getToken();
+async function postVmAction(resourceGroup, vmName, action, armToken) {
+  const token = armToken ?? await getToken();
   const url = `${vmBaseUrl(resourceGroup, vmName)}/${action}?api-version=${COMPUTE_API_VERSION}`;
 
   const { status, headers } = await axios.post(url, null, {
@@ -111,15 +85,30 @@ async function postVmAction(resourceGroup, vmName, action) {
     resourceGroup,
     action,
     accepted: status === 202,
-    operationUrl:
-      headers['azure-asyncoperation'] ?? headers['location'] ?? null,
+    operationUrl: headers['azure-asyncoperation'] ?? headers['location'] ?? null,
   };
 }
 
-// start   → powers on a deallocated or stopped VM
-// deallocate → stops the VM and releases compute resources (no billing)
-// restart → reboots a running VM
+export const startVm   = (rg, vm, token) => postVmAction(rg, vm, 'start', token);
+export const stopVm    = (rg, vm, token) => postVmAction(rg, vm, 'deallocate', token);
+export const restartVm = (rg, vm, token) => postVmAction(rg, vm, 'restart', token);
 
-export const startVm   = (rg, vm) => postVmAction(rg, vm, 'start');
-export const stopVm    = (rg, vm) => postVmAction(rg, vm, 'deallocate');
-export const restartVm = (rg, vm) => postVmAction(rg, vm, 'restart');
+export async function listAllVms(armToken) {
+  const token = armToken ?? await getToken();
+  const sub = process.env.AZURE_SUBSCRIPTION_ID;
+  const url =
+    `${BASE_URL}/subscriptions/${sub}` +
+    `/providers/Microsoft.Compute/virtualMachines?api-version=${COMPUTE_API_VERSION}`;
+
+  const { data } = await axios.get(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  return (data.value ?? []).map((vm) => ({
+    name: vm.name,
+    resourceGroup: vm.id.split('/')[4],
+    location: vm.location,
+    vmSize: vm.properties?.hardwareProfile?.vmSize,
+    provisioningState: vm.properties?.provisioningState,
+  }));
+}
