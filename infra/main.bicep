@@ -3,22 +3,23 @@ param location string = resourceGroup().location
 
 @description('Name prefix for all resources (lowercase alphanumeric, max 12 chars).')
 @maxLength(12)
-param resourcePrefix string
+param resourcePrefix string = 'mcpvm'
 
 @description('Public container image, e.g. myacr.azurecr.io/azure-vm-mcp-server:latest')
-param containerImage string
+param containerImage string = 'acrdefcontainer.azurecr.io/azure-vm-mcp-server:latest'
 
-@description('Azure Subscription ID that the MCP server will manage VMs in.')
-param azureSubscriptionId string
+@description('Azure Subscription ID that the MCP server will manage VMs in. Defaults to the deployment subscription.')
+param azureSubscriptionId string = subscription().subscriptionId
 
 @secure()
-@minLength(1)
 @description('API key clients must send in the x-api-key header to call the MCP server.')
 param mcpApiKey string
 
 // ─── Azure Container Instance ─────────────────────────────────────────────────
 // System-assigned managed identity is created automatically by ACI.
 // No user-assigned identity or client secret needed.
+
+var dnsLabel = '${resourcePrefix}-mcp-${uniqueString(resourceGroup().id)}'
 
 resource aci 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
   name: '${resourcePrefix}-mcp'
@@ -27,13 +28,14 @@ resource aci 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
     type: 'SystemAssigned'
   }
   properties: {
+    sku: 'Standard'
     osType: 'Linux'
-    restartPolicy: 'Always'
+    restartPolicy: 'OnFailure'
     ipAddress: {
       type: 'Public'
-      dnsNameLabel: '${resourcePrefix}-mcp'
+      dnsNameLabel: dnsLabel
       ports: [
-        { port: 3000, protocol: 'TCP' }
+        { port: 80, protocol: 'TCP' }
       ]
     }
     containers: [
@@ -44,11 +46,11 @@ resource aci 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
           resources: {
             requests: {
               cpu: 1
-              memoryInGB: 1
+              memoryInGB: json('1.5')
             }
           }
           ports: [
-            { port: 3000, protocol: 'TCP' }
+            { port: 80, protocol: 'TCP' }
           ]
           environmentVariables: [
             { name: 'AZURE_SUBSCRIPTION_ID', value: azureSubscriptionId }
@@ -77,7 +79,7 @@ module rbac 'modules/rbac.bicep' = {
 output fqdn string = aci.properties.ipAddress.fqdn
 
 @description('MCP server SSE endpoint for Copilot Studio.')
-output mcpSseUrl string = 'http://${aci.properties.ipAddress.fqdn}:3000/sse'
+output mcpSseUrl string = 'http://${aci.properties.ipAddress.fqdn}/sse'
 
 @description('Health check URL.')
-output healthUrl string = 'http://${aci.properties.ipAddress.fqdn}:3000/health'
+output healthUrl string = 'http://${aci.properties.ipAddress.fqdn}/health'

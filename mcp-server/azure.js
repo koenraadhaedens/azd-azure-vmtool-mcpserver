@@ -112,3 +112,119 @@ export async function listAllVms(armToken) {
     provisioningState: vm.properties?.provisioningState,
   }));
 }
+
+export async function listVmDisks(resourceGroup, vmName, armToken) {
+  const token = armToken ?? await getToken();
+  const url = `${vmBaseUrl(resourceGroup, vmName)}?api-version=${COMPUTE_API_VERSION}`;
+
+  const { data } = await axios.get(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const osDisk = data.properties?.storageProfile?.osDisk;
+  const dataDisks = data.properties?.storageProfile?.dataDisks ?? [];
+
+  return {
+    vmName,
+    resourceGroup,
+    osDisk: osDisk
+      ? {
+          name: osDisk.name,
+          diskId: osDisk.managedDisk?.id,
+          sku: osDisk.managedDisk?.storageAccountType ?? 'unknown',
+        }
+      : null,
+    dataDisks: dataDisks.map((d) => ({
+      name: d.name,
+      lun: d.lun,
+      diskId: d.managedDisk?.id,
+      sku: d.managedDisk?.storageAccountType ?? 'unknown',
+    })),
+  };
+}
+
+// Resolves a disk name to its resource group (which may differ from the VM's resource group).
+async function resolveDiskResourceGroup(diskName, preferredResourceGroup, token) {
+  const sub = process.env.AZURE_SUBSCRIPTION_ID;
+
+  // Try the VM's resource group first (most common case).
+  const directUrl =
+    `${BASE_URL}/subscriptions/${sub}` +
+    `/resourceGroups/${preferredResourceGroup}` +
+    `/providers/Microsoft.Compute/disks/${diskName}?api-version=${COMPUTE_API_VERSION}`;
+
+  try {
+    const { data } = await axios.get(directUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+      validateStatus: (s) => s === 200 || s === 404,
+    });
+    if (data?.id) return preferredResourceGroup;
+  } catch {
+    // fall through to subscription-wide search
+  }
+
+  // Fall back to subscription-wide lookup.
+  const listUrl =
+    `${BASE_URL}/subscriptions/${sub}` +
+    `/providers/Microsoft.Compute/disks?api-version=${COMPUTE_API_VERSION}`;
+
+  const { data } = await axios.get(listUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const match = (data.value ?? []).find((d) => d.name === diskName);
+  if (!match) throw new Error(`Disk "${diskName}" not found in subscription`);
+
+  return match.id.split('/')[4];
+}
+
+// Maps human-friendly shorthand tier names to ARM SKU identifiers.
+// S* = Standard HDD, E* = Standard SSD, P* = Premium SSD, U* = Ultra.
+function normalizeDiskSku(sku) {
+  const upper = sku.trim().toUpperCase();
+  if (/^S\d+$/.test(upper)) return 'Standard_LRS';
+  if (/^E\d+$/.test(upper)) return 'StandardSSD_LRS';
+  if (/^P\d+$/.test(upper)) return 'Premium_LRS';
+  if (/^U\d*$/.test(upper)) return 'UltraSSD_LRS';
+  return sku;
+}
+
+export async function changeDiskSku(resourceGroup, diskName, newSku, armToken) {
+  newSku = normalizeDiskSku(newSku);
+  const token = armToken ?? await getToken();
+  const sub = process.env.AZURE_SUBSCRIPTION_ID;
+
+  const diskResourceGroup = await resolveDiskResourceGroup(diskName, resourceGroup, token);
+
+  const url =
+    `${BASE_URL}/subscriptions/${sub}` +
+    `/resourceGroups/${diskResourceGroup}` +
+    `/providers/Microsoft.Compute/disks/${diskName}?api-version=${COMPUTE_API_VERSION}`;
+
+  const { data: current } = await axios.get(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const previousSku = current.sku?.name ?? 'unknown';
+
+  const { status, headers } = await axios.patch(
+    url,
+    { sku: { name: newSku } },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      validateStatus: (s) => s === 200 || s === 202,
+    }
+  );
+
+  return {
+    diskName,
+    resourceGroup: diskResourceGroup,
+    previousSku,
+    newSku,
+    accepted: status === 202,
+    operationUrl: headers['azure-asyncoperation'] ?? headers['location'] ?? null,
+  };
+}

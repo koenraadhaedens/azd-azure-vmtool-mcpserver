@@ -8,7 +8,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import express from 'express';
 import cors from 'cors';
-import { getVmState, listVms, listAllVms, startVm, stopVm, restartVm } from './azure.js';
+import { getVmState, listVms, listAllVms, startVm, stopVm, restartVm, listVmDisks, changeDiskSku } from './azure.js';
 
 const REQUIRED = ['AZURE_SUBSCRIPTION_ID'];
 const missing = REQUIRED.filter((k) => !process.env[k]);
@@ -23,7 +23,12 @@ if (process.env.TRANSPORT !== 'stdio' && !process.env.MCP_API_KEY) {
 }
 
 // Validates the x-api-key header against MCP_API_KEY.
+// OPTIONS requests are passed through to allow CORS preflight.
 function requireApiKey(req, res, next) {
+  if (req.method === 'OPTIONS') {
+    next();
+    return;
+  }
   const key = req.headers['x-api-key'];
   if (!key || key !== process.env.MCP_API_KEY) {
     res.status(401).json({ error: 'Invalid or missing API key' });
@@ -103,6 +108,43 @@ const TOOLS = [
       required: [],
     },
   },
+  {
+    name: 'list_vm_disks',
+    description: 'List all disks (OS and data) attached to an Azure Virtual Machine, including their current SKU/performance tier.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        resourceGroup: { type: 'string', description: 'Name of the Azure Resource Group' },
+        vmName:        { type: 'string', description: 'Name of the Virtual Machine' },
+      },
+      required: ['resourceGroup', 'vmName'],
+    },
+  },
+  {
+    name: 'change_disk_sku',
+    description:
+      'Change the performance tier (SKU) of an Azure managed disk. ' +
+      'Standard HDD tiers: Standard_LRS. ' +
+      'Standard SSD tiers: StandardSSD_LRS. ' +
+      'Premium SSD tiers: Premium_LRS (e.g. P10, P20, P30). ' +
+      'Ultra Disk: UltraSSD_LRS. ' +
+      'Common shorthand values like S10, P20 map to Standard_LRS / Premium_LRS with the appropriate size tier. ' +
+      'The disk must exist as a managed disk; the VM does not need to be deallocated for a SKU-only change.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        resourceGroup: { type: 'string', description: 'Resource Group that contains the disk (or the VM)' },
+        diskName:      { type: 'string', description: 'Name of the managed disk to update' },
+        newSku:        {
+          type: 'string',
+          description:
+            'Target SKU. Accepts ARM names (Standard_LRS, StandardSSD_LRS, Premium_LRS, UltraSSD_LRS, Premium_ZRS, StandardSSD_ZRS) ' +
+            'or shorthand tier codes: S4/S10/S20/… → Standard_LRS (HDD), E4/E10/E20/… → StandardSSD_LRS, P4/P10/P20/P30/… → Premium_LRS, U → UltraSSD_LRS.',
+        },
+      },
+      required: ['resourceGroup', 'diskName', 'newSku'],
+    },
+  },
 ];
 
 function createServer() {
@@ -138,6 +180,12 @@ function createServer() {
           break;
         case 'list_all_vms':
           result = await listAllVms(armToken);
+          break;
+        case 'list_vm_disks':
+          result = await listVmDisks(args.resourceGroup, args.vmName, armToken);
+          break;
+        case 'change_disk_sku':
+          result = await changeDiskSku(args.resourceGroup, args.diskName, args.newSku, armToken);
           break;
         default:
           throw new Error(`Unknown tool: ${name}`);
@@ -176,9 +224,10 @@ if (process.env.TRANSPORT === 'stdio') {
 
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-  // POST /sse — Streamable HTTP transport used by Copilot Studio and modern MCP clients.
-  // Handles both initialization (no mcp-session-id) and subsequent requests.
+  // Ensure the Accept header satisfies the Streamable HTTP transport requirement.
+  // Some clients (e.g. MCP Inspector proxy) omit it.
   app.post('/sse', requireApiKey, async (req, res) => {
+    req.headers['accept'] = 'application/json, text/event-stream';
     const sessionId = req.headers['mcp-session-id'];
     let transport;
 
