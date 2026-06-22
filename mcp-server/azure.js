@@ -3,7 +3,8 @@ import { DefaultAzureCredential } from '@azure/identity';
 import 'dotenv/config';
 
 const BASE_URL = 'https://management.azure.com';
-const COMPUTE_API_VERSION = '2024-03-02';
+const VM_API_VERSION   = '2024-03-01';
+const DISK_API_VERSION = '2024-03-02';
 
 const credential = new DefaultAzureCredential();
 let tokenCache = { token: null, expiresAt: 0 };
@@ -35,7 +36,7 @@ function vmBaseUrl(resourceGroup, vmName) {
 
 export async function getVmState(resourceGroup, vmName, armToken) {
   const token = armToken ?? await getToken();
-  const url = `${vmBaseUrl(resourceGroup, vmName)}/instanceView?api-version=${COMPUTE_API_VERSION}`;
+  const url = `${vmBaseUrl(resourceGroup, vmName)}/instanceView?api-version=${VM_API_VERSION}`;
 
   const { data } = await axios.get(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -57,7 +58,7 @@ export async function listVms(resourceGroup, armToken) {
   const url =
     `${BASE_URL}/subscriptions/${sub}` +
     `/resourceGroups/${resourceGroup}` +
-    `/providers/Microsoft.Compute/virtualMachines?api-version=${COMPUTE_API_VERSION}`;
+    `/providers/Microsoft.Compute/virtualMachines?api-version=${VM_API_VERSION}`;
 
   const { data } = await axios.get(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -73,7 +74,7 @@ export async function listVms(resourceGroup, armToken) {
 
 async function postVmAction(resourceGroup, vmName, action, armToken) {
   const token = armToken ?? await getToken();
-  const url = `${vmBaseUrl(resourceGroup, vmName)}/${action}?api-version=${COMPUTE_API_VERSION}`;
+  const url = `${vmBaseUrl(resourceGroup, vmName)}/${action}?api-version=${VM_API_VERSION}`;
 
   const { status, headers } = await axios.post(url, null, {
     headers: { Authorization: `Bearer ${token}` },
@@ -98,7 +99,7 @@ export async function listAllVms(armToken) {
   const sub = process.env.AZURE_SUBSCRIPTION_ID;
   const url =
     `${BASE_URL}/subscriptions/${sub}` +
-    `/providers/Microsoft.Compute/virtualMachines?api-version=${COMPUTE_API_VERSION}`;
+    `/providers/Microsoft.Compute/virtualMachines?api-version=${VM_API_VERSION}`;
 
   const { data } = await axios.get(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -115,7 +116,7 @@ export async function listAllVms(armToken) {
 
 export async function listVmDisks(resourceGroup, vmName, armToken) {
   const token = armToken ?? await getToken();
-  const url = `${vmBaseUrl(resourceGroup, vmName)}?api-version=${COMPUTE_API_VERSION}`;
+  const url = `${vmBaseUrl(resourceGroup, vmName)}?api-version=${VM_API_VERSION}`;
 
   const { data } = await axios.get(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -151,7 +152,7 @@ async function resolveDiskResourceGroup(diskName, preferredResourceGroup, token)
   const directUrl =
     `${BASE_URL}/subscriptions/${sub}` +
     `/resourceGroups/${preferredResourceGroup}` +
-    `/providers/Microsoft.Compute/disks/${diskName}?api-version=${COMPUTE_API_VERSION}`;
+    `/providers/Microsoft.Compute/disks/${diskName}?api-version=${DISK_API_VERSION}`;
 
   try {
     const { data } = await axios.get(directUrl, {
@@ -166,7 +167,7 @@ async function resolveDiskResourceGroup(diskName, preferredResourceGroup, token)
   // Fall back to subscription-wide lookup.
   const listUrl =
     `${BASE_URL}/subscriptions/${sub}` +
-    `/providers/Microsoft.Compute/disks?api-version=${COMPUTE_API_VERSION}`;
+    `/providers/Microsoft.Compute/disks?api-version=${DISK_API_VERSION}`;
 
   const { data } = await axios.get(listUrl, {
     headers: { Authorization: `Bearer ${token}` },
@@ -199,7 +200,7 @@ export async function changeDiskSku(resourceGroup, diskName, newSku, armToken) {
   const url =
     `${BASE_URL}/subscriptions/${sub}` +
     `/resourceGroups/${diskResourceGroup}` +
-    `/providers/Microsoft.Compute/disks/${diskName}?api-version=${COMPUTE_API_VERSION}`;
+    `/providers/Microsoft.Compute/disks/${diskName}?api-version=${DISK_API_VERSION}`;
 
   const { data: current } = await axios.get(url, {
     headers: { Authorization: `Bearer ${token}` },
