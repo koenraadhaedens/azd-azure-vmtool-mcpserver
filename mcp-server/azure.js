@@ -3,7 +3,7 @@ import { DefaultAzureCredential } from '@azure/identity';
 import 'dotenv/config';
 
 const BASE_URL = 'https://management.azure.com';
-const COMPUTE_API_VERSION = '2024-03-01';
+const COMPUTE_API_VERSION = '2024-03-02';
 
 const credential = new DefaultAzureCredential();
 let tokenCache = { token: null, expiresAt: 0 };
