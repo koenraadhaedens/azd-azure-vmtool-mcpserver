@@ -8,7 +8,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import express from 'express';
 import cors from 'cors';
-import { getVmState, listVms, listAllVms, startVm, stopVm, restartVm, listVmDisks, changeDiskSku } from './azure.js';
+import { getVmState, listVms, listAllVms, startVm, stopVm, restartVm, listVmDisks, changeDiskSku, createVm, deleteVm } from './azure.js';
 
 const REQUIRED = ['AZURE_SUBSCRIPTION_ID'];
 const missing = REQUIRED.filter((k) => !process.env[k]);
@@ -145,6 +145,41 @@ const TOOLS = [
       required: ['resourceGroup', 'diskName', 'newSku'],
     },
   },
+  {
+    name: 'create_vm',
+    description:
+      'Create a new Azure Virtual Machine. ' +
+      'A VNet, subnet, and NIC are created automatically if no subnetId is provided. ' +
+      'Supported image shorthands: Ubuntu2204 (default), Ubuntu2004, Win2022, Win2019.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        resourceGroup: { type: 'string',  description: 'Name of an existing Azure Resource Group' },
+        vmName:        { type: 'string',  description: 'Name for the new Virtual Machine (also used to name auto-created network resources)' },
+        location:      { type: 'string',  description: 'Azure region, e.g. eastus, westeurope' },
+        vmSize:        { type: 'string',  description: 'VM size, e.g. Standard_B2s, Standard_D2s_v3. Defaults to Standard_B2s.' },
+        adminUsername: { type: 'string',  description: 'Administrator username for the VM' },
+        adminPassword: { type: 'string',  description: 'Administrator password. Must be 12-123 characters and meet Azure complexity requirements.' },
+        image:         { type: 'string',  description: 'OS image shorthand: Ubuntu2204 (default), Ubuntu2004, Win2022, Win2019.' },
+        subnetId:      { type: 'string',  description: 'Full ARM resource ID of an existing subnet. If omitted, a new VNet and subnet are created automatically.' },
+      },
+      required: ['resourceGroup', 'vmName', 'location', 'adminUsername', 'adminPassword'],
+    },
+  },
+  {
+    name: 'delete_vm',
+    description:
+      'Delete an Azure Virtual Machine. ' +
+      'Only the VM itself is removed; associated NIC, OS disk, and VNet are NOT deleted automatically.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        resourceGroup: { type: 'string', description: 'Name of the Azure Resource Group' },
+        vmName:        { type: 'string', description: 'Name of the Virtual Machine to delete' },
+      },
+      required: ['resourceGroup', 'vmName'],
+    },
+  },
 ];
 
 function createServer() {
@@ -186,6 +221,16 @@ function createServer() {
           break;
         case 'change_disk_sku':
           result = await changeDiskSku(args.resourceGroup, args.diskName, args.newSku, armToken);
+          break;
+        case 'create_vm':
+          result = await createVm(
+            args.resourceGroup, args.vmName, args.location,
+            args.vmSize ?? 'Standard_B2s', args.adminUsername, args.adminPassword,
+            args.image, args.subnetId, armToken,
+          );
+          break;
+        case 'delete_vm':
+          result = await deleteVm(args.resourceGroup, args.vmName, armToken);
           break;
         default:
           throw new Error(`Unknown tool: ${name}`);
