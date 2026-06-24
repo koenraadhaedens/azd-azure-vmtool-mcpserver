@@ -7,3 +7,30 @@ infra:
   path: infra
   module: main
   resourceGroup: rg-${AZURE_ENV_NAME}
+
+hooks:
+  postprovision:
+    posix:
+      shell: sh
+      run: |
+        echo ""
+        echo "================================================="
+        echo " MCP Server ready!"
+        echo " Add this URL to your agent:"
+        echo " http://${FQDN}/sse"
+        echo ""
+        echo " Set header:  x-api-key: <your mcpApiKey>"
+        echo "================================================="
+        echo ""
+    windows:
+      shell: pwsh
+      run: |
+        Write-Host ""
+        Write-Host "=================================================" -ForegroundColor Cyan
+        Write-Host " MCP Server ready!" -ForegroundColor Green
+        Write-Host " Add this URL to your agent:" -ForegroundColor Green
+        Write-Host " http://$env:FQDN/sse" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host " Set header:  x-api-key: <your mcpApiKey>" -ForegroundColor Green
+        Write-Host "=================================================" -ForegroundColor Cyan
+        Write-Host ""
