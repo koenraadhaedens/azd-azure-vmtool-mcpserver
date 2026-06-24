@@ -1,15 +1,13 @@
 #!/bin/sh
-# Bicep outputs are not yet stored when postprovision fires.
-# Derive the resource group from AZURE_ENV_NAME (matches azure.yaml: rg-${AZURE_ENV_NAME})
-# and query Azure directly for the container FQDN.
-ENV_NAME=$(azd env get-value AZURE_ENV_NAME 2>/dev/null)
-RESOURCE_GROUP="rg-${ENV_NAME}"
-SUBSCRIPTION=$(azd env get-value AZURE_SUBSCRIPTION_ID 2>/dev/null)
+# AZURE_ENV_NAME, AZURE_SUBSCRIPTION_ID and AZURE_RESOURCE_GROUP are injected
+# directly as shell env vars by azd — do not use 'azd env get-value' for them.
+RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-rg-${AZURE_ENV_NAME}}"
 
-FQDN=$(az container list \
-  --subscription "${SUBSCRIPTION}" \
+# Read FQDN from the most recent deployment output in the resource group.
+FQDN=$(az deployment group list \
+  --subscription "${AZURE_SUBSCRIPTION_ID}" \
   --resource-group "${RESOURCE_GROUP}" \
-  --query "[0].properties.ipAddress.fqdn" \
+  --query "sort_by([],&properties.timestamp)[-1].properties.outputs.fqdn.value" \
   --output tsv 2>/dev/null)
 
 echo ""
