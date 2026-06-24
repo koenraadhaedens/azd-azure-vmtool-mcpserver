@@ -65,7 +65,7 @@ resource aci 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
 // Assign the custom VM operator role to the system-assigned identity.
 // Deployed after ACI so the principalId is available.
 module rbac 'modules/rbac.bicep' = {
-  name: 'rbac-${resourcePrefix}'
+  name: 'rbac-${resourcePrefix}-${uniqueString(resourceGroup().id)}'
   scope: subscription()
   params: {
     principalId: aci.identity.principalId
