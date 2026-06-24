@@ -1,3 +1,7 @@
+# Load FQDN from azd environment if not already set by the hook runner
+if (-not $env:FQDN) {
+  $env:FQDN = azd env get-value FQDN 2>$null
+}
 Write-Host ""
 Write-Host "=================================================" -ForegroundColor Cyan
 Write-Host " MCP Server ready!" -ForegroundColor Green
