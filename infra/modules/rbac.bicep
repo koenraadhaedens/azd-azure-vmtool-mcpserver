@@ -22,6 +22,8 @@ resource vmOperatorRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
           'Microsoft.Compute/virtualMachines/start/action'
           'Microsoft.Compute/virtualMachines/deallocate/action'
           'Microsoft.Compute/virtualMachines/restart/action'
+          'Microsoft.Compute/disks/read'
+          'Microsoft.Compute/disks/write'
         ]
         notActions: []
         dataActions: []
