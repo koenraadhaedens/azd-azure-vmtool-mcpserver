@@ -12,7 +12,9 @@ hooks:
   postprovision:
     posix:
       shell: sh
-      run: scripts/postprovision.sh
+      run: ./scripts/postprovision.sh
+      interactive: true
     windows:
       shell: pwsh
-      run: scripts/postprovision.ps1
+      run: ./scripts/postprovision.ps1
+      interactive: true
