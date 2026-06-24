@@ -78,6 +78,12 @@ module rbac 'modules/rbac.bicep' = {
 @description('Public FQDN of the container instance.')
 output fqdn string = aci.properties.ipAddress.fqdn
 
+@description('MCP server endpoint to use when adding this server to an agent.')
+output MCP_SERVER_URL string = 'http://${aci.properties.ipAddress.fqdn}/sse'
+
+@description('Instructions for adding the MCP server to an agent.')
+output MCP_AGENT_INSTRUCTIONS string = 'Add the MCP server to your agent using the URL: http://${aci.properties.ipAddress.fqdn}/sse — set the x-api-key header to the value of mcpApiKey.'
+
 @description('MCP server SSE endpoint for Copilot Studio.')
 output mcpSseUrl string = 'http://${aci.properties.ipAddress.fqdn}/sse'
 
