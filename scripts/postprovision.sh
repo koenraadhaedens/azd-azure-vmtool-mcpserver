@@ -1,0 +1,10 @@
+#!/bin/sh
+echo ""
+echo "================================================="
+echo " MCP Server ready!"
+echo " Add this URL to your agent:"
+echo " http://${FQDN}/sse"
+echo ""
+echo " Set header:  x-api-key: <your mcpApiKey>"
+echo "================================================="
+echo ""
