@@ -150,11 +150,12 @@ const TOOLS = [
     description:
       'Create a new Azure Virtual Machine. ' +
       'A VNet, subnet, and NIC are created automatically if no subnetId is provided. ' +
-      'Supported image shorthands: Ubuntu2204 (default), Ubuntu2004, Win2022, Win2019.',
+      'Supported image shorthands: Ubuntu2204 (default), Ubuntu2004, Win2022, Win2019. ' +
+      'If resourceGroup is omitted the VM is created in the deployment resource group.',
     inputSchema: {
       type: 'object',
       properties: {
-        resourceGroup: { type: 'string',  description: 'Name of an existing Azure Resource Group' },
+        resourceGroup: { type: 'string',  description: 'Name of an existing Azure Resource Group. Defaults to the resource group this MCP server was deployed into.' },
         vmName:        { type: 'string',  description: 'Name for the new Virtual Machine (also used to name auto-created network resources)' },
         location:      { type: 'string',  description: 'Azure region, e.g. eastus, westeurope' },
         vmSize:        { type: 'string',  description: 'VM size, e.g. Standard_B2s, Standard_D2s_v3. Defaults to Standard_B2s.' },
@@ -163,7 +164,7 @@ const TOOLS = [
         image:         { type: 'string',  description: 'OS image shorthand: Ubuntu2204 (default), Ubuntu2004, Win2022, Win2019.' },
         subnetId:      { type: 'string',  description: 'Full ARM resource ID of an existing subnet. If omitted, a new VNet and subnet are created automatically.' },
       },
-      required: ['resourceGroup', 'vmName', 'location', 'adminUsername', 'adminPassword'],
+      required: ['vmName', 'location', 'adminUsername', 'adminPassword'],
     },
   },
   {
@@ -224,7 +225,8 @@ function createServer() {
           break;
         case 'create_vm':
           result = await createVm(
-            args.resourceGroup, args.vmName, args.location,
+            args.resourceGroup ?? process.env.AZURE_RESOURCE_GROUP,
+            args.vmName, args.location,
             args.vmSize ?? 'Standard_B2s', args.adminUsername, args.adminPassword,
             args.image, args.subnetId, armToken,
           );

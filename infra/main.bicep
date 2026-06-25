@@ -54,6 +54,7 @@ resource aci 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
           ]
           environmentVariables: [
             { name: 'AZURE_SUBSCRIPTION_ID', value: azureSubscriptionId }
+            { name: 'AZURE_RESOURCE_GROUP',  value: resourceGroup().name }
             { name: 'MCP_API_KEY',           secureValue: mcpApiKey }
           ]
         }
