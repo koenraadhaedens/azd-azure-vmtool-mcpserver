@@ -8,6 +8,10 @@ param resourcePrefix string = 'mcpvm'
 @description('Public container image, e.g. myacr.azurecr.io/azure-vm-mcp-server:latest')
 param containerImage string = 'acrdefcontainer.azurecr.io/azure-vm-mcp-server:latest'
 
+@description('Caddy image mirrored into an approved registry, e.g. myacr.azurecr.io/caddy:2.11.4-alpine.')
+@minLength(1)
+param caddyImage string = 'acrdefcontainer.azurecr.io/caddy:2.11.4-alpine'
+
 @description('Azure Subscription ID that the MCP server will manage VMs in. Defaults to the deployment subscription.')
 param azureSubscriptionId string = subscription().subscriptionId
 
@@ -20,6 +24,7 @@ param mcpApiKey string
 // No user-assigned identity or client secret needed.
 
 var dnsLabel = '${resourcePrefix}-mcp-${uniqueString(resourceGroup().id)}'
+var fqdn = '${dnsLabel}.${location}.azurecontainer.io'
 
 resource aci 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
   name: '${resourcePrefix}-mcp'
@@ -36,6 +41,7 @@ resource aci 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
       dnsNameLabel: dnsLabel
       ports: [
         { port: 80, protocol: 'TCP' }
+        { port: 443, protocol: 'TCP' }
       ]
     }
     containers: [
@@ -50,13 +56,51 @@ resource aci 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
             }
           }
           ports: [
-            { port: 80, protocol: 'TCP' }
+            { port: 8080, protocol: 'TCP' }
           ]
           environmentVariables: [
             { name: 'AZURE_SUBSCRIPTION_ID', value: azureSubscriptionId }
+            { name: 'AZURE_RESOURCE_GROUP',  value: resourceGroup().name }
             { name: 'MCP_API_KEY',           secureValue: mcpApiKey }
+            { name: 'PORT',                  value: '8080' }
           ]
         }
+      }
+      {
+        name: 'caddy'
+        properties: {
+          image: caddyImage
+          command: [
+            'caddy'
+            'reverse-proxy'
+            '--from'
+            fqdn
+            '--to'
+            'localhost:8080'
+          ]
+          resources: {
+            requests: {
+              cpu: json('0.5')
+              memoryInGB: json('0.5')
+            }
+          }
+          ports: [
+            { port: 80, protocol: 'TCP' }
+            { port: 443, protocol: 'TCP' }
+          ]
+          volumeMounts: [
+            {
+              name: 'caddy-data'
+              mountPath: '/data'
+            }
+          ]
+        }
+      }
+    ]
+    volumes: [
+      {
+        name: 'caddy-data'
+        emptyDir: {}
       }
     ]
   }
@@ -79,13 +123,13 @@ module rbac 'modules/rbac.bicep' = {
 output fqdn string = aci.properties.ipAddress.fqdn
 
 @description('MCP server endpoint to use when adding this server to an agent.')
-output MCP_SERVER_URL string = 'http://${aci.properties.ipAddress.fqdn}/sse'
+output MCP_SERVER_URL string = 'https://${aci.properties.ipAddress.fqdn}/sse'
 
 @description('Instructions for adding the MCP server to an agent.')
-output MCP_AGENT_INSTRUCTIONS string = 'Add the MCP server to your agent using the URL: http://${aci.properties.ipAddress.fqdn}/sse — set the x-api-key header to the value of mcpApiKey.'
+output MCP_AGENT_INSTRUCTIONS string = 'Add the MCP server to your agent using the URL: https://${aci.properties.ipAddress.fqdn}/sse — set the x-api-key header to the value of mcpApiKey.'
 
 @description('MCP server SSE endpoint for Copilot Studio.')
-output mcpSseUrl string = 'http://${aci.properties.ipAddress.fqdn}/sse'
+output mcpSseUrl string = 'https://${aci.properties.ipAddress.fqdn}/sse'
 
 @description('Health check URL.')
-output healthUrl string = 'http://${aci.properties.ipAddress.fqdn}/health'
+output healthUrl string = 'https://${aci.properties.ipAddress.fqdn}/health'
