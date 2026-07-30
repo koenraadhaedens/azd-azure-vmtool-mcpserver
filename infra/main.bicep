@@ -10,7 +10,7 @@ param containerImage string = 'acrdefcontainer.azurecr.io/azure-vm-mcp-server:la
 
 @description('Caddy image mirrored into an approved registry, e.g. myacr.azurecr.io/caddy:2.11.4-alpine.')
 @minLength(1)
-param caddyImage string
+param caddyImage string = 'acrdefcontainer.azurecr.io/caddy:2.11.4-alpine'
 
 @description('Azure Subscription ID that the MCP server will manage VMs in. Defaults to the deployment subscription.')
 param azureSubscriptionId string = subscription().subscriptionId
