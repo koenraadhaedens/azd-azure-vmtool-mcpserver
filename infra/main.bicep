@@ -24,40 +24,6 @@ param mcpApiKey string
 
 var dnsLabel = '${resourcePrefix}-mcp-${uniqueString(resourceGroup().id)}'
 var fqdn = '${dnsLabel}.${location}.azurecontainer.io'
-var storageAccountName = take(toLower('${resourcePrefix}${uniqueString(resourceGroup().id)}'), 24)
-
-resource caddyStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
-  name: storageAccountName
-  location: location
-  sku: {
-    name: 'Standard_LRS'
-  }
-  kind: 'StorageV2'
-  properties: {
-    allowSharedKeyAccess: true
-    allowBlobPublicAccess: false
-    minimumTlsVersion: 'TLS1_2'
-    publicNetworkAccess: 'Enabled'
-    networkAcls: {
-      bypass: 'AzureServices'
-      defaultAction: 'Allow'
-    }
-  }
-}
-
-resource caddyFileService 'Microsoft.Storage/storageAccounts/fileServices@2023-05-01' = {
-  parent: caddyStorage
-  name: 'default'
-}
-
-resource caddyDataShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-05-01' = {
-  parent: caddyFileService
-  name: 'caddy-data'
-  properties: {
-    enabledProtocols: 'SMB'
-    shareQuota: 1
-  }
-}
 
 resource aci 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
   name: '${resourcePrefix}-mcp'
@@ -133,11 +99,7 @@ resource aci 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
     volumes: [
       {
         name: 'caddy-data'
-        azureFile: {
-          shareName: caddyDataShare.name
-          storageAccountName: caddyStorage.name
-          storageAccountKey: caddyStorage.listKeys().keys[0].value
-        }
+        emptyDir: {}
       }
     ]
   }
