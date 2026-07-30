@@ -8,8 +8,9 @@ param resourcePrefix string = 'mcpvm'
 @description('Public container image, e.g. myacr.azurecr.io/azure-vm-mcp-server:latest')
 param containerImage string = 'acrdefcontainer.azurecr.io/azure-vm-mcp-server:latest'
 
-@description('Caddy container image used as the HTTPS reverse proxy.')
-param caddyImage string = 'caddy:2-alpine'
+@description('Caddy image mirrored into an approved registry, e.g. myacr.azurecr.io/caddy:2.11.4-alpine.')
+@minLength(1)
+param caddyImage string
 
 @description('Azure Subscription ID that the MCP server will manage VMs in. Defaults to the deployment subscription.')
 param azureSubscriptionId string = subscription().subscriptionId
